@@ -1,0 +1,11 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: activemq-artemis-continuity-operator
+subjects:
+- kind: ServiceAccount
+  name: activemq-artemis-continuity-operator
+roleRef:
+  kind: Role
+  name: activemq-artemis-continuity-operator
+  apiGroup: rbac.authorization.k8s.io
