@@ -13,199 +13,132 @@ import (
 	"strconv"
 
 	"golang.org/x/tools/go/ast/astutil"
-	"golang.org/x/tools/internal/lsp/protocol"
-	"golang.org/x/tools/internal/telemetry/event"
-	errors "golang.org/x/xerrors"
+	"golang.org/x/tools/internal/span"
 )
 
 // IdentifierInfo holds information about an identifier in Go source.
 type IdentifierInfo struct {
-	Name     string
-	Snapshot Snapshot
-	mappedRange
-
-	Type struct {
-		mappedRange
+	Name  string
+	Range span.Range
+	File  GoFile
+	Type  struct {
+		Range  span.Range
+		Object types.Object
+	}
+	Declaration struct {
+		Range  span.Range
+		Node   ast.Node
 		Object types.Object
 	}
 
-	Declaration Declaration
-
-	ident *ast.Ident
-
-	// enclosing is an expression used to determine the link anchor for an identifier.
-	enclosing types.Type
-
-	pkg Package
-	qf  types.Qualifier
-}
-
-type Declaration struct {
-	MappedRange []mappedRange
-	node        ast.Node
-	obj         types.Object
+	ident            *ast.Ident
+	wasEmbeddedField bool
 }
 
 // Identifier returns identifier information for a position
 // in a file, accounting for a potentially incomplete selector.
-func Identifier(ctx context.Context, snapshot Snapshot, fh FileHandle, pos protocol.Position) (*IdentifierInfo, error) {
-	ctx, done := event.StartSpan(ctx, "source.Identifier")
-	defer done()
-
-	pkg, pgh, err := getParsedFile(ctx, snapshot, fh, NarrowestPackageHandle)
-	if err != nil {
-		return nil, fmt.Errorf("getting file for Identifier: %v", err)
-	}
-	file, _, m, _, err := pgh.Cached()
-	if err != nil {
-		return nil, err
-	}
-	spn, err := m.PointSpan(pos)
-	if err != nil {
-		return nil, err
-	}
-	rng, err := spn.Range(m.Converter)
-	if err != nil {
-		return nil, err
-	}
-	return findIdentifier(ctx, snapshot, pkg, file, rng.Start)
-}
-
-var ErrNoIdentFound = errors.New("no identifier found")
-
-func findIdentifier(ctx context.Context, s Snapshot, pkg Package, file *ast.File, pos token.Pos) (*IdentifierInfo, error) {
-	// Handle import specs separately, as there is no formal position for a package declaration.
-	if result, err := importSpec(s, pkg, file, pos); result != nil || err != nil {
+func Identifier(ctx context.Context, v View, f GoFile, pos token.Pos) (*IdentifierInfo, error) {
+	if result, err := identifier(ctx, v, f, pos); err != nil || result != nil {
 		return result, err
 	}
-	path := pathEnclosingObjNode(file, pos)
+	// If the position is not an identifier but immediately follows
+	// an identifier or selector period (as is common when
+	// requesting a completion), use the path to the preceding node.
+	result, err := identifier(ctx, v, f, pos-1)
+	if result == nil && err == nil {
+		err = fmt.Errorf("no identifier found")
+	}
+	return result, err
+}
+
+// identifier checks a single position for a potential identifier.
+func identifier(ctx context.Context, v View, f GoFile, pos token.Pos) (*IdentifierInfo, error) {
+	fAST := f.GetAST(ctx)
+	pkg := f.GetPackage(ctx)
+	if pkg == nil || pkg.IsIllTyped() {
+		return nil, fmt.Errorf("package for %s is ill typed", f.URI())
+	}
+
+	path, _ := astutil.PathEnclosingInterval(fAST, pos, pos)
 	if path == nil {
-		return nil, ErrNoIdentFound
+		return nil, fmt.Errorf("can't find node enclosing position")
 	}
 
-	view := s.View()
-
-	ident, _ := path[0].(*ast.Ident)
-	if ident == nil {
-		return nil, ErrNoIdentFound
+	// Handle import specs separately, as there is no formal position for a package declaration.
+	if result, err := importSpec(f, fAST, pkg, pos); result != nil || err != nil {
+		return result, err
 	}
 
-	result := &IdentifierInfo{
-		Snapshot:  s,
-		qf:        qualifier(file, pkg.GetTypes(), pkg.GetTypesInfo()),
-		pkg:       pkg,
-		ident:     ident,
-		enclosing: searchForEnclosing(pkg, path),
-	}
+	result := &IdentifierInfo{File: f}
 
-	var wasEmbeddedField bool
+	switch node := path[0].(type) {
+	case *ast.Ident:
+		result.ident = node
+	case *ast.SelectorExpr:
+		result.ident = node.Sel
+	}
+	if result.ident == nil {
+		return nil, nil
+	}
 	for _, n := range path[1:] {
 		if field, ok := n.(*ast.Field); ok {
-			wasEmbeddedField = len(field.Names) == 0
+			result.wasEmbeddedField = len(field.Names) == 0
 			break
 		}
 	}
-
 	result.Name = result.ident.Name
-	var err error
-	if result.mappedRange, err = posToMappedRange(view, pkg, result.ident.Pos(), result.ident.End()); err != nil {
-		return nil, err
+	result.Range = span.NewRange(v.FileSet(), result.ident.Pos(), result.ident.End())
+	result.Declaration.Object = pkg.GetTypesInfo().ObjectOf(result.ident)
+	if result.Declaration.Object == nil {
+		return nil, fmt.Errorf("no object for ident %v", result.Name)
 	}
 
-	result.Declaration.obj = pkg.GetTypesInfo().ObjectOf(result.ident)
-	if result.Declaration.obj == nil {
-		// If there was no types.Object for the declaration, there might be an implicit local variable
-		// declaration in a type switch.
-		if objs := typeSwitchImplicits(pkg, path); len(objs) > 0 {
-			// There is no types.Object for the declaration of an implicit local variable,
-			// but all of the types.Objects associated with the usages of this variable can be
-			// used to connect it back to the declaration.
-			// Preserve the first of these objects and treat it as if it were the declaring object.
-			result.Declaration.obj = objs[0]
-		} else {
-			// Probably a type error.
-			return nil, errors.Errorf("no object for ident %v", result.Name)
-		}
-	}
+	var err error
 
 	// Handle builtins separately.
-	if result.Declaration.obj.Parent() == types.Universe {
-		astObj, err := view.LookupBuiltin(ctx, result.Name)
-		if err != nil {
-			return nil, err
-		}
-		decl, ok := astObj.Decl.(ast.Node)
+	if result.Declaration.Object.Parent() == types.Universe {
+		decl, ok := lookupBuiltinDecl(f.View(), result.Name).(ast.Node)
 		if !ok {
-			return nil, errors.Errorf("no declaration for %s", result.Name)
+			return nil, fmt.Errorf("no declaration for %s", result.Name)
 		}
-		result.Declaration.node = decl
-
-		rng, err := nameToMappedRange(view, pkg, decl.Pos(), result.Name)
-		if err != nil {
+		result.Declaration.Node = decl
+		if result.Declaration.Range, err = posToRange(ctx, v.FileSet(), result.Name, decl.Pos()); err != nil {
 			return nil, err
 		}
-		result.Declaration.MappedRange = append(result.Declaration.MappedRange, rng)
-
 		return result, nil
 	}
 
-	if wasEmbeddedField {
+	if result.wasEmbeddedField {
 		// The original position was on the embedded field declaration, so we
 		// try to dig out the type and jump to that instead.
-		if v, ok := result.Declaration.obj.(*types.Var); ok {
+		if v, ok := result.Declaration.Object.(*types.Var); ok {
 			if typObj := typeToObject(v.Type()); typObj != nil {
-				result.Declaration.obj = typObj
+				result.Declaration.Object = typObj
 			}
 		}
 	}
 
-	rng, err := objToMappedRange(view, pkg, result.Declaration.obj)
-	if err != nil {
+	if result.Declaration.Range, err = objToRange(ctx, v.FileSet(), result.Declaration.Object); err != nil {
 		return nil, err
 	}
-	result.Declaration.MappedRange = append(result.Declaration.MappedRange, rng)
-
-	if result.Declaration.node, err = objToNode(s.View(), pkg, result.Declaration.obj); err != nil {
+	if result.Declaration.Node, err = objToNode(ctx, v, result.Declaration.Object, result.Declaration.Range); err != nil {
 		return nil, err
 	}
 	typ := pkg.GetTypesInfo().TypeOf(result.ident)
 	if typ == nil {
-		return result, nil
+		return nil, fmt.Errorf("no type for %s", result.Name)
 	}
-
 	result.Type.Object = typeToObject(typ)
 	if result.Type.Object != nil {
 		// Identifiers with the type "error" are a special case with no position.
 		if hasErrorType(result.Type.Object) {
 			return result, nil
 		}
-		if result.Type.mappedRange, err = objToMappedRange(view, pkg, result.Type.Object); err != nil {
+		if result.Type.Range, err = objToRange(ctx, v.FileSet(), result.Type.Object); err != nil {
 			return nil, err
 		}
 	}
 	return result, nil
-}
-
-func searchForEnclosing(pkg Package, path []ast.Node) types.Type {
-	for _, n := range path {
-		switch n := n.(type) {
-		case *ast.SelectorExpr:
-			if selection, ok := pkg.GetTypesInfo().Selections[n]; ok {
-				return deref(selection.Recv())
-			}
-		case *ast.CompositeLit:
-			if t, ok := pkg.GetTypesInfo().Types[n]; ok {
-				return t.Type
-			}
-		case *ast.TypeSpec:
-			if _, ok := n.Type.(*ast.StructType); ok {
-				if t, ok := pkg.GetTypesInfo().Defs[n.Name]; ok {
-					return t.Type()
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func typeToObject(typ types.Type) types.Object {
@@ -223,14 +156,34 @@ func hasErrorType(obj types.Object) bool {
 	return types.IsInterface(obj.Type()) && obj.Pkg() == nil && obj.Name() == "error"
 }
 
-func objToNode(v View, pkg Package, obj types.Object) (ast.Decl, error) {
-	declAST, _, err := findPosInPackage(v, pkg, obj.Pos())
+func objToRange(ctx context.Context, fset *token.FileSet, obj types.Object) (span.Range, error) {
+	return posToRange(ctx, fset, obj.Name(), obj.Pos())
+}
+
+func posToRange(ctx context.Context, fset *token.FileSet, name string, pos token.Pos) (span.Range, error) {
+	if !pos.IsValid() {
+		return span.Range{}, fmt.Errorf("invalid position for %v", name)
+	}
+	return span.NewRange(fset, pos, pos+token.Pos(len(name))), nil
+}
+
+func objToNode(ctx context.Context, v View, obj types.Object, rng span.Range) (ast.Decl, error) {
+	s, err := rng.Span()
 	if err != nil {
 		return nil, err
 	}
-	path, _ := astutil.PathEnclosingInterval(declAST, obj.Pos(), obj.Pos())
+	f, err := v.GetFile(ctx, s.URI())
+	if err != nil {
+		return nil, err
+	}
+	declFile, ok := f.(GoFile)
+	if !ok {
+		return nil, fmt.Errorf("not a go file %v", s.URI())
+	}
+	declAST := declFile.GetAST(ctx)
+	path, _ := astutil.PathEnclosingInterval(declAST, rng.Start, rng.End)
 	if path == nil {
-		return nil, errors.Errorf("no path for object %v", obj.Name())
+		return nil, fmt.Errorf("no path for range %v", rng)
 	}
 	for _, node := range path {
 		switch node := node.(type) {
@@ -251,117 +204,40 @@ func objToNode(v View, pkg Package, obj types.Object) (ast.Decl, error) {
 }
 
 // importSpec handles positions inside of an *ast.ImportSpec.
-func importSpec(s Snapshot, pkg Package, file *ast.File, pos token.Pos) (*IdentifierInfo, error) {
-	var imp *ast.ImportSpec
-	for _, spec := range file.Imports {
-		if spec.Path.Pos() <= pos && pos < spec.Path.End() {
-			imp = spec
+func importSpec(f GoFile, fAST *ast.File, pkg Package, pos token.Pos) (*IdentifierInfo, error) {
+	for _, imp := range fAST.Imports {
+		if !(imp.Pos() <= pos && pos < imp.End()) {
+			continue
 		}
-	}
-	if imp == nil {
-		return nil, nil
-	}
-	importPath, err := strconv.Unquote(imp.Path.Value)
-	if err != nil {
-		return nil, errors.Errorf("import path not quoted: %s (%v)", imp.Path.Value, err)
-	}
-	result := &IdentifierInfo{
-		Snapshot: s,
-		Name:     importPath,
-		pkg:      pkg,
-	}
-	if result.mappedRange, err = posToMappedRange(s.View(), pkg, imp.Path.Pos(), imp.Path.End()); err != nil {
-		return nil, err
-	}
-	// Consider the "declaration" of an import spec to be the imported package.
-	importedPkg, err := pkg.GetImport(importPath)
-	if err != nil {
-		return nil, err
-	}
-	if importedPkg.GetSyntax() == nil {
-		return nil, errors.Errorf("no syntax for for %q", importPath)
-	}
-	// Return all of the files in the package as the definition of the import spec.
-	dest := pkg.GetSyntax()
-	if len(dest) == 0 {
-		return nil, errors.Errorf("package %q has no files", importPath)
-	}
-
-	for _, dst := range importedPkg.GetSyntax() {
-		rng, err := posToMappedRange(s.View(), pkg, dst.Pos(), dst.End())
+		importPath, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("import path not quoted: %s (%v)", imp.Path.Value, err)
 		}
-		result.Declaration.MappedRange = append(result.Declaration.MappedRange, rng)
-	}
-
-	result.Declaration.node = imp
-	return result, nil
-}
-
-// typeSwitchImplicits returns all the implicit type switch objects
-// that correspond to the leaf *ast.Ident.
-func typeSwitchImplicits(pkg Package, path []ast.Node) []types.Object {
-	ident, _ := path[0].(*ast.Ident)
-	if ident == nil {
-		return nil
-	}
-
-	var (
-		ts     *ast.TypeSwitchStmt
-		assign *ast.AssignStmt
-		cc     *ast.CaseClause
-		obj    = pkg.GetTypesInfo().ObjectOf(ident)
-	)
-
-	// Walk our ancestors to determine if our leaf ident refers to a
-	// type switch variable, e.g. the "a" from "switch a := b.(type)".
-Outer:
-	for i := 1; i < len(path); i++ {
-		switch n := path[i].(type) {
-		case *ast.AssignStmt:
-			// Check if ident is the "a" in "a := foo.(type)". The "a" in
-			// this case has no types.Object, so check for ident equality.
-			if len(n.Lhs) == 1 && n.Lhs[0] == ident {
-				assign = n
-			}
-		case *ast.CaseClause:
-			// Check if ident is a use of "a" within a case clause. Each
-			// case clause implicitly maps "a" to a different types.Object,
-			// so check if ident's object is the case clause's implicit
-			// object.
-			if obj != nil && pkg.GetTypesInfo().Implicits[n] == obj {
-				cc = n
-			}
-		case *ast.TypeSwitchStmt:
-			// Look for the type switch that owns our previously found
-			// *ast.AssignStmt or *ast.CaseClause.
-
-			if n.Assign == assign {
-				ts = n
-				break Outer
-			}
-
-			for _, stmt := range n.Body.List {
-				if stmt == cc {
-					ts = n
-					break Outer
-				}
+		result := &IdentifierInfo{
+			File:  f,
+			Name:  importPath,
+			Range: span.NewRange(f.View().FileSet(), imp.Pos(), imp.End()),
+		}
+		// Consider the "declaration" of an import spec to be the imported package.
+		importedPkg := pkg.GetImport(importPath)
+		if importedPkg == nil {
+			return nil, fmt.Errorf("no import for %q", importPath)
+		}
+		if importedPkg.GetSyntax() == nil {
+			return nil, fmt.Errorf("no syntax for for %q", importPath)
+		}
+		// Heuristic: Jump to the longest (most "interesting") file of the package.
+		var dest *ast.File
+		for _, f := range importedPkg.GetSyntax() {
+			if dest == nil || f.End()-f.Pos() > dest.End()-dest.Pos() {
+				dest = f
 			}
 		}
-	}
-
-	if ts == nil {
-		return nil
-	}
-
-	// Our leaf ident refers to a type switch variable. Fan out to the
-	// type switch's implicit case clause objects.
-	var objs []types.Object
-	for _, cc := range ts.Body.List {
-		if ccObj := pkg.GetTypesInfo().Implicits[cc]; ccObj != nil {
-			objs = append(objs, ccObj)
+		if dest == nil {
+			return nil, fmt.Errorf("package %q has no files", importPath)
 		}
+		result.Declaration.Range = span.NewRange(f.View().FileSet(), dest.Name.Pos(), dest.Name.End())
+		return result, nil
 	}
-	return objs
+	return nil, nil
 }

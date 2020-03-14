@@ -35,8 +35,8 @@ type ClassThermalZoneStats struct {
 	Passive *uint64 // Optional: millidegrees Celsius. (0 for disabled, > 1000 for enabled+value)
 }
 
-// ClassThermalZoneStats returns Thermal Zone metrics for all zones.
-func (fs FS) ClassThermalZoneStats() ([]ClassThermalZoneStats, error) {
+// NewClassThermalZoneStats returns Thermal Zone metrics for all zones.
+func (fs FS) NewClassThermalZoneStats() ([]ClassThermalZoneStats, error) {
 	zones, err := filepath.Glob(fs.sys.Path("class/thermal/thermal_zone[0-9]*"))
 	if err != nil {
 		return []ClassThermalZoneStats{}, err

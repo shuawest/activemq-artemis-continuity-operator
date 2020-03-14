@@ -6,6 +6,14 @@
 
 package socket
 
+const (
+	sysAF_UNSPEC = 0x0
+	sysAF_INET   = 0x2
+	sysAF_INET6  = 0x18
+
+	sysSOCK_RAW = 0x3
+)
+
 type iovec struct {
 	Base *byte
 	Len  uint64
@@ -53,6 +61,7 @@ type sockaddrInet6 struct {
 const (
 	sizeofIovec   = 0x10
 	sizeofMsghdr  = 0x30
+	sizeofMmsghdr = 0x38
 	sizeofCmsghdr = 0xc
 
 	sizeofSockaddrInet  = 0x10

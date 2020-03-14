@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,106 +19,68 @@ const fileScheme = "file"
 // URI represents the full URI for a file.
 type URI string
 
-func (uri URI) IsFile() bool {
-	return strings.HasPrefix(string(uri), "file://")
-}
-
-// Filename returns the file path for the given URI.
-// It is an error to call this on a URI that is not a valid filename.
-func (uri URI) Filename() string {
+// Filename returns the file path for the given URI. It will return an error if
+// the URI is invalid, or if the URI does not have the file scheme.
+func (uri URI) Filename() (string, error) {
 	filename, err := filename(uri)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return filepath.FromSlash(filename)
+	return filepath.FromSlash(filename), nil
 }
 
 func filename(uri URI) (string, error) {
-	if uri == "" {
-		return "", nil
-	}
 	u, err := url.ParseRequestURI(string(uri))
 	if err != nil {
 		return "", err
 	}
 	if u.Scheme != fileScheme {
-		return "", fmt.Errorf("only file URIs are supported, got %q from %q", u.Scheme, uri)
+		return "", fmt.Errorf("only file URIs are supported, got %v", u.Scheme)
 	}
-	// If the URI is a Windows URI, we trim the leading "/" and lowercase
-	// the drive letter, which will never be case sensitive.
-	if isWindowsDriveURIPath(u.Path) {
-		u.Path = strings.ToUpper(string(u.Path[1])) + u.Path[2:]
+	if isWindowsDriveURI(u.Path) {
+		u.Path = u.Path[1:]
 	}
 	return u.Path, nil
 }
 
-func URIFromURI(s string) URI {
-	if !strings.HasPrefix(s, "file:///") {
+// NewURI returns a span URI for the string.
+// It will attempt to detect if the string is a file path or uri.
+func NewURI(s string) URI {
+	if u, err := url.PathUnescape(s); err == nil {
+		s = u
+	}
+	if strings.HasPrefix(s, fileScheme+"://") {
 		return URI(s)
 	}
-
-	// Even though the input is a URI, it may not be in canonical form. VS Code
-	// in particular over-escapes :, @, etc. Unescape and re-encode to canonicalize.
-	path, err := url.PathUnescape(s[len("file://"):])
-	if err != nil {
-		panic(err)
-	}
-
-	// File URIs from Windows may have lowercase drive letters.
-	// Since drive letters are guaranteed to be case insensitive,
-	// we change them to uppercase to remain consistent.
-	// For example, file:///c:/x/y/z becomes file:///C:/x/y/z.
-	if isWindowsDriveURIPath(path) {
-		path = path[:1] + strings.ToUpper(string(path[1])) + path[2:]
-	}
-	u := url.URL{Scheme: fileScheme, Path: path}
-	return URI(u.String())
+	return FileURI(s)
 }
 
 func CompareURI(a, b URI) int {
-	if equalURI(a, b) {
+	if a == b {
 		return 0
 	}
-	if a < b {
-		return -1
-	}
-	return 1
-}
-
-func equalURI(a, b URI) bool {
-	if a == b {
-		return true
-	}
 	// If we have the same URI basename, we may still have the same file URIs.
-	if !strings.EqualFold(path.Base(string(a)), path.Base(string(b))) {
-		return false
+	if fa, err := a.Filename(); err == nil {
+		if fb, err := b.Filename(); err == nil {
+			if strings.EqualFold(filepath.Base(fa), filepath.Base(fb)) {
+				// Stat the files to check if they are equal.
+				if infoa, err := os.Stat(fa); err == nil {
+					if infob, err := os.Stat(fb); err == nil {
+						if os.SameFile(infoa, infob) {
+							return 0
+						}
+					}
+				}
+			}
+			return strings.Compare(fa, fb)
+		}
 	}
-	fa, err := filename(a)
-	if err != nil {
-		return false
-	}
-	fb, err := filename(b)
-	if err != nil {
-		return false
-	}
-	// Stat the files to check if they are equal.
-	infoa, err := os.Stat(filepath.FromSlash(fa))
-	if err != nil {
-		return false
-	}
-	infob, err := os.Stat(filepath.FromSlash(fb))
-	if err != nil {
-		return false
-	}
-	return os.SameFile(infoa, infob)
+	return strings.Compare(string(a), string(b))
 }
 
-// URIFromPath returns a span URI for the supplied file path.
+// FileURI returns a span URI for the supplied file path.
 // It will always have the file scheme.
-func URIFromPath(path string) URI {
-	if path == "" {
-		return ""
-	}
+func FileURI(path string) URI {
 	// Handle standard library paths that contain the literal "$GOROOT".
 	// TODO(rstambler): The go/packages API should allow one to determine a user's $GOROOT.
 	const prefix = "$GOROOT"
@@ -134,7 +95,7 @@ func URIFromPath(path string) URI {
 	}
 	// Check the file path again, in case it became absolute.
 	if isWindowsDrivePath(path) {
-		path = "/" + strings.ToUpper(string(path[0])) + path[1:]
+		path = "/" + path
 	}
 	path = filepath.ToSlash(path)
 	u := url.URL{
@@ -146,9 +107,8 @@ func URIFromPath(path string) URI {
 
 // isWindowsDrivePath returns true if the file path is of the form used by
 // Windows. We check if the path begins with a drive letter, followed by a ":".
-// For example: C:/x/y/z.
 func isWindowsDrivePath(path string) bool {
-	if len(path) < 3 {
+	if len(path) < 4 {
 		return false
 	}
 	return unicode.IsLetter(rune(path[0])) && path[1] == ':'
@@ -156,8 +116,9 @@ func isWindowsDrivePath(path string) bool {
 
 // isWindowsDriveURI returns true if the file URI is of the format used by
 // Windows URIs. The url.Parse package does not specially handle Windows paths
-// (see golang/go#6027). We check if the URI path has a drive prefix (e.g. "/C:").
-func isWindowsDriveURIPath(uri string) bool {
+// (see https://golang.org/issue/6027). We check if the URI path has
+// a drive prefix (e.g. "/C:"). If so, we trim the leading "/".
+func isWindowsDriveURI(uri string) bool {
 	if len(uri) < 4 {
 		return false
 	}

@@ -53,9 +53,9 @@ const resourcePrefixHeader = "google-cloud-resource-prefix"
 
 // Client is a client for reading and writing data in a datastore dataset.
 type Client struct {
-	connPool gtransport.ConnPool
-	client   pb.DatastoreClient
-	dataset  string // Called dataset by the datastore API, synonym for project ID.
+	conn    *grpc.ClientConn
+	client  pb.DatastoreClient
+	dataset string // Called dataset by the datastore API, synonym for project ID.
 }
 
 // NewClient creates a new Client for a given dataset.  If the project ID is
@@ -111,14 +111,14 @@ func NewClient(ctx context.Context, projectID string, opts ...option.ClientOptio
 	if projectID == "" {
 		return nil, errors.New("datastore: missing project/dataset id")
 	}
-	connPool, err := gtransport.DialPool(ctx, o...)
+	conn, err := gtransport.Dial(ctx, o...)
 	if err != nil {
 		return nil, fmt.Errorf("dialing: %v", err)
 	}
 	return &Client{
-		connPool: connPool,
-		client:   newDatastoreClient(connPool, projectID),
-		dataset:  projectID,
+		conn:    conn,
+		client:  newDatastoreClient(conn, projectID),
+		dataset: projectID,
 	}, nil
 }
 
@@ -312,7 +312,7 @@ func checkMultiArg(v reflect.Value) (m multiArgType, elemType reflect.Type) {
 
 // Close closes the Client.
 func (c *Client) Close() error {
-	return c.connPool.Close()
+	return c.conn.Close()
 }
 
 // Get loads the entity stored for key into dst, which must be a struct pointer
@@ -630,8 +630,7 @@ func deleteMutations(keys []*Key) ([]*pb.Mutation, error) {
 	return mutations, nil
 }
 
-// Mutate applies one or more mutations. Mutations are applied in
-// non-transactional mode. If you need atomicity, use Transaction.Mutate.
+// Mutate applies one or more mutations atomically.
 // It returns the keys of the argument Mutations, in the same order.
 //
 // If any of the mutations are invalid, Mutate returns a MultiError with the errors.

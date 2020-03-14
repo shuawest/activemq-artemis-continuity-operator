@@ -18,7 +18,6 @@
 package proftest
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,7 +26,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"text/template"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -40,39 +38,6 @@ import (
 const (
 	monitorWriteScope = "https://www.googleapis.com/auth/monitoring.write"
 )
-
-// BaseStartupTmpl is the common part of the startup script that
-// can be shared by multiple tests.
-var BaseStartupTmpl = template.Must(template.New("startupScript").Parse(`
-{{ define "prologue" -}}
-#! /bin/bash
-(
-# Signal any unexpected error.
-trap 'echo "{{.ErrorString}}"' ERR
-
-# Shut down the VM in 5 minutes after this script exits
-# to stop accounting the VM for billing and cores quota.
-trap "sleep 300 && poweroff" EXIT
-
-retry() {
-  for i in {1..3}; do
-    "${@}" && return 0
-  done
-  return 1
-}
-
-# Fail on any error.
-set -eo pipefail
-
-# Display commands being run
-set -x
-{{- end }}
-
-{{ define "epilogue" -}}
-# Write output to serial port 2 with timestamp.
-) 2>&1 | while read line; do echo "$(date): ${line}"; done >/dev/ttyS1
-{{- end }}
-`))
 
 // TestRunner has common elements used for testing profiling agents on a range
 // of environments.
@@ -130,7 +95,6 @@ type InstanceConfig struct {
 	MachineType   string
 	ImageProject  string
 	ImageFamily   string
-	Scopes        []string
 }
 
 // ClusterConfig is configuration for starting single GKE cluster for profiling
@@ -144,15 +108,6 @@ type ClusterConfig struct {
 	ImageName       string
 	Bucket          string
 	Dockerfile      string
-}
-
-// queryProfileRequest is the request format for querying the profile server.
-type queryProfileRequest struct {
-	StartTime        string            `json:"startTime"`
-	EndTime          string            `json:"endTime"`
-	ProfileType      string            `json:"profileType"`
-	Target           string            `json:"target"`
-	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 }
 
 // CheckNonEmpty returns nil if the profile has a profiles and deployments
@@ -255,8 +210,10 @@ func (tr *GCETestRunner) StartInstance(ctx context.Context, inst *InstanceConfig
 			}},
 		},
 		ServiceAccounts: []*compute.ServiceAccount{{
-			Email:  "default",
-			Scopes: append(inst.Scopes, monitorWriteScope),
+			Email: "default",
+			Scopes: []string{
+				monitorWriteScope,
+			},
 		}},
 	}).Do()
 
@@ -349,33 +306,12 @@ func (tr *GCETestRunner) PollForSerialOutput(ctx context.Context, inst *Instance
 // QueryProfiles retrieves profiles of a specific type, from a specific time
 // range, associated with a particular service and project.
 func (tr *TestRunner) QueryProfiles(projectID, service, startTime, endTime, profileType string) (ProfileResponse, error) {
-	return tr.QueryProfilesWithZone(projectID, service, startTime, endTime, profileType, "")
-}
-
-// QueryProfilesWithZone retrieves profiles of a specific type, from a specific
-// time range, in a specified zone, associated with a particular service
-// and project.
-func (tr *TestRunner) QueryProfilesWithZone(projectID, service, startTime, endTime, profileType, zone string) (ProfileResponse, error) {
 	queryURL := fmt.Sprintf("https://cloudprofiler.googleapis.com/v2/projects/%s/profiles:query", projectID)
-	deploymentLabels := map[string]string{}
-	if zone != "" {
-		deploymentLabels["zone"] = zone
-	}
+	const queryJSONFmt = `{"endTime": "%s", "profileType": "%s","startTime": "%s", "target": "%s"}`
 
-	qpr := queryProfileRequest{
-		StartTime:        startTime,
-		EndTime:          endTime,
-		ProfileType:      profileType,
-		Target:           service,
-		DeploymentLabels: deploymentLabels,
-	}
+	queryRequest := fmt.Sprintf(queryJSONFmt, endTime, profileType, startTime, service)
 
-	queryJSON, err := json.Marshal(qpr)
-	if err != nil {
-		return ProfileResponse{}, fmt.Errorf("failed to marshall request to JSON: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", queryURL, bytes.NewReader(queryJSON))
+	req, err := http.NewRequest("POST", queryURL, strings.NewReader(queryRequest))
 	if err != nil {
 		return ProfileResponse{}, fmt.Errorf("failed to create an API request: %v", err)
 	}

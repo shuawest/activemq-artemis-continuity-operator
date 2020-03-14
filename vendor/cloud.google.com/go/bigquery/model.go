@@ -125,9 +125,6 @@ type ModelMetadata struct {
 	// inherited from the encapsulating dataset.
 	Location string
 
-	// Custom encryption configuration (e.g., Cloud KMS keys).
-	EncryptionConfig *EncryptionConfig
-
 	// The input feature columns used to train the model.
 	featureColumns []*bq.StandardSqlField
 
@@ -165,33 +162,35 @@ func (mm *ModelMetadata) RawTrainingRuns() []*TrainingRun {
 	return runs
 }
 
+// StandardSQLField represents standard-sql specific type information.  It is used for expressing
+// metadata about BigQuery ML models.
+// Experimental:  This information may be modified or removed in future versions of this package.
+type StandardSQLField bq.StandardSqlField
+
 // RawLabelColumns exposes the underlying label columns used to train an ML model and uses types from
 // "google.golang.org/api/bigquery/v2", which are subject to change without warning.
 // It is EXPERIMENTAL and subject to change or removal without notice.
-func (mm *ModelMetadata) RawLabelColumns() ([]*StandardSQLField, error) {
+func (mm *ModelMetadata) RawLabelColumns() []*StandardSQLField {
 	return bqToModelCols(mm.labelColumns)
 }
 
 // RawFeatureColumns exposes the underlying feature columns used to train an ML model and uses types from
 // "google.golang.org/api/bigquery/v2", which are subject to change without warning.
 // It is EXPERIMENTAL and subject to change or removal without notice.
-func (mm *ModelMetadata) RawFeatureColumns() ([]*StandardSQLField, error) {
+func (mm *ModelMetadata) RawFeatureColumns() []*StandardSQLField {
 	return bqToModelCols(mm.featureColumns)
 }
 
-func bqToModelCols(s []*bq.StandardSqlField) ([]*StandardSQLField, error) {
+func bqToModelCols(s []*bq.StandardSqlField) []*StandardSQLField {
 	if s == nil {
-		return nil, nil
+		return nil
 	}
 	var cols []*StandardSQLField
 	for _, v := range s {
-		c, err := bqToStandardSQLField(v)
-		if err != nil {
-			return nil, err
-		}
-		cols = append(cols, c)
+		c := StandardSQLField(*v)
+		cols = append(cols, &c)
 	}
-	return cols, nil
+	return cols
 }
 
 func bqToModelMetadata(m *bq.Model) (*ModelMetadata, error) {
@@ -204,7 +203,6 @@ func bqToModelMetadata(m *bq.Model) (*ModelMetadata, error) {
 		ExpirationTime:   unixMillisToTime(m.ExpirationTime),
 		CreationTime:     unixMillisToTime(m.CreationTime),
 		LastModifiedTime: unixMillisToTime(m.LastModifiedTime),
-		EncryptionConfig: bqToEncryptionConfig(m.EncryptionConfiguration),
 		featureColumns:   m.FeatureColumns,
 		labelColumns:     m.LabelColumns,
 		trainingRuns:     m.TrainingRuns,
@@ -226,9 +224,6 @@ type ModelMetadataToUpdate struct {
 	// set ExpirationTime to NeverExpire.  The zero value is ignored.
 	ExpirationTime time.Time
 
-	// The model's encryption configuration.
-	EncryptionConfig *EncryptionConfig
-
 	labelUpdater
 }
 
@@ -246,10 +241,6 @@ func (mm *ModelMetadataToUpdate) toBQ() (*bq.Model, error) {
 	if mm.Name != nil {
 		m.FriendlyName = optional.ToString(mm.Name)
 		forceSend("FriendlyName")
-	}
-
-	if mm.EncryptionConfig != nil {
-		m.EncryptionConfiguration = mm.EncryptionConfig.toBQ()
 	}
 
 	if !validExpiration(mm.ExpirationTime) {

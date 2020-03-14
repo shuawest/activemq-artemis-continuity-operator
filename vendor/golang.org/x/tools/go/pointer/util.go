@@ -277,8 +277,8 @@ func (ns *nodeset) add(n nodeid) bool {
 	return ns.Sparse.Insert(int(n))
 }
 
-func (ns *nodeset) addAll(y *nodeset) bool {
-	return ns.UnionWith(&y.Sparse)
+func (x *nodeset) addAll(y *nodeset) bool {
+	return x.UnionWith(&y.Sparse)
 }
 
 // Profiling & debugging -------------------------------------------------------

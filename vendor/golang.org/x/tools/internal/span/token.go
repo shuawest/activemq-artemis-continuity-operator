@@ -13,10 +13,9 @@ import (
 // It also carries the FileSet that produced the positions, so that it is
 // self contained.
 type Range struct {
-	FileSet   *token.FileSet
-	Start     token.Pos
-	End       token.Pos
-	Converter Converter
+	FileSet *token.FileSet
+	Start   token.Pos
+	End     token.Pos
 }
 
 // TokenConverter is a Converter backed by a token file set and file.
@@ -61,63 +60,27 @@ func (r Range) IsPoint() bool {
 // It will fill in all the members of the Span, calculating the line and column
 // information.
 func (r Range) Span() (Span, error) {
-	if !r.Start.IsValid() {
-		return Span{}, fmt.Errorf("start pos is not valid")
-	}
 	f := r.FileSet.File(r.Start)
 	if f == nil {
 		return Span{}, fmt.Errorf("file not found in FileSet")
 	}
-	var s Span
+	s := Span{v: span{URI: FileURI(f.Name())}}
 	var err error
-	var startFilename string
-	startFilename, s.v.Start.Line, s.v.Start.Column, err = position(f, r.Start)
+	s.v.Start.Offset, err = offset(f, r.Start)
 	if err != nil {
 		return Span{}, err
 	}
-	s.v.URI = URIFromPath(startFilename)
 	if r.End.IsValid() {
-		var endFilename string
-		endFilename, s.v.End.Line, s.v.End.Column, err = position(f, r.End)
+		s.v.End.Offset, err = offset(f, r.End)
 		if err != nil {
 			return Span{}, err
-		}
-		// In the presence of line directives, a single File can have sections from
-		// multiple file names.
-		if endFilename != startFilename {
-			return Span{}, fmt.Errorf("span begins in file %q but ends in %q", startFilename, endFilename)
 		}
 	}
 	s.v.Start.clean()
 	s.v.End.clean()
 	s.v.clean()
-	if r.Converter != nil {
-		return s.WithOffset(r.Converter)
-	}
-	if startFilename != f.Name() {
-		return Span{}, fmt.Errorf("must supply Converter for file %q containing lines from %q", f.Name(), startFilename)
-	}
-	return s.WithOffset(NewTokenConverter(r.FileSet, f))
-}
-
-func position(f *token.File, pos token.Pos) (string, int, int, error) {
-	off, err := offset(f, pos)
-	if err != nil {
-		return "", 0, 0, err
-	}
-	return positionFromOffset(f, off)
-}
-
-func positionFromOffset(f *token.File, offset int) (string, int, int, error) {
-	if offset > f.Size() {
-		return "", 0, 0, fmt.Errorf("offset %v is past the end of the file %v", offset, f.Size())
-	}
-	pos := f.Pos(offset)
-	p := f.Position(pos)
-	if offset == f.Size() {
-		return p.Filename, p.Line + 1, 1, nil
-	}
-	return p.Filename, p.Line, p.Column, nil
+	converter := NewTokenConverter(r.FileSet, f)
+	return s.WithPosition(converter)
 }
 
 // offset is a copy of the Offset function in go/token, but with the adjustment
@@ -136,25 +99,18 @@ func (s Span) Range(converter *TokenConverter) (Range, error) {
 	if err != nil {
 		return Range{}, err
 	}
-	// go/token will panic if the offset is larger than the file's size,
-	// so check here to avoid panicking.
-	if s.Start().Offset() > converter.file.Size() {
-		return Range{}, fmt.Errorf("start offset %v is past the end of the file %v", s.Start(), converter.file.Size())
-	}
-	if s.End().Offset() > converter.file.Size() {
-		return Range{}, fmt.Errorf("end offset %v is past the end of the file %v", s.End(), converter.file.Size())
-	}
 	return Range{
-		FileSet:   converter.fset,
-		Start:     converter.file.Pos(s.Start().Offset()),
-		End:       converter.file.Pos(s.End().Offset()),
-		Converter: converter,
+		FileSet: converter.fset,
+		Start:   converter.file.Pos(s.Start().Offset()),
+		End:     converter.file.Pos(s.End().Offset()),
 	}, nil
 }
 
 func (l *TokenConverter) ToPosition(offset int) (int, int, error) {
-	_, line, col, err := positionFromOffset(l.file, offset)
-	return line, col, err
+	//TODO: check offset fits in file
+	pos := l.file.Pos(offset)
+	p := l.fset.Position(pos)
+	return p.Line, p.Column, nil
 }
 
 func (l *TokenConverter) ToOffset(line, col int) (int, error) {
@@ -163,7 +119,7 @@ func (l *TokenConverter) ToOffset(line, col int) (int, error) {
 	}
 	lineMax := l.file.LineCount() + 1
 	if line > lineMax {
-		return -1, fmt.Errorf("line is beyond end of file %v", lineMax)
+		return -1, fmt.Errorf("line is beyond end of file")
 	} else if line == lineMax {
 		if col > 1 {
 			return -1, fmt.Errorf("column is beyond end of file")

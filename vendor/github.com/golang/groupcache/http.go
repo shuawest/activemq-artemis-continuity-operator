@@ -18,7 +18,6 @@ package groupcache
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,13 +38,13 @@ const defaultReplicas = 50
 type HTTPPool struct {
 	// Context optionally specifies a context for the server to use when it
 	// receives a request.
-	// If nil, the server uses the request's context
-	Context func(*http.Request) context.Context
+	// If nil, the server uses a nil Context.
+	Context func(*http.Request) Context
 
 	// Transport optionally specifies an http.RoundTripper for the client
 	// to use when it makes a request.
 	// If nil, the client uses http.DefaultTransport.
-	Transport func(context.Context) http.RoundTripper
+	Transport func(Context) http.RoundTripper
 
 	// this peer's base URL, e.g. "https://example.net:8000"
 	self string
@@ -158,11 +157,9 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such group: "+groupName, http.StatusNotFound)
 		return
 	}
-	var ctx context.Context
+	var ctx Context
 	if p.Context != nil {
 		ctx = p.Context(r)
-	} else {
-		ctx = r.Context()
 	}
 
 	group.Stats.ServerRequests.Add(1)
@@ -184,7 +181,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type httpGetter struct {
-	transport func(context.Context) http.RoundTripper
+	transport func(Context) http.RoundTripper
 	baseURL   string
 }
 
@@ -192,7 +189,7 @@ var bufferPool = sync.Pool{
 	New: func() interface{} { return new(bytes.Buffer) },
 }
 
-func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResponse) error {
+func (h *httpGetter) Get(context Context, in *pb.GetRequest, out *pb.GetResponse) error {
 	u := fmt.Sprintf(
 		"%v%v/%v",
 		h.baseURL,
@@ -203,10 +200,9 @@ func (h *httpGetter) Get(ctx context.Context, in *pb.GetRequest, out *pb.GetResp
 	if err != nil {
 		return err
 	}
-	req = req.WithContext(ctx)
 	tr := http.DefaultTransport
 	if h.transport != nil {
-		tr = h.transport(ctx)
+		tr = h.transport(context)
 	}
 	res, err := tr.RoundTrip(req)
 	if err != nil {

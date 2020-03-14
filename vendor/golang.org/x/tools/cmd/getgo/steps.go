@@ -25,7 +25,7 @@ func welcome(ctx context.Context) error {
 	}
 	if strings.ToLower(answer) != "y" {
 		fmt.Println("Exiting install.")
-		return errExitCleanly
+		return exitCleanly
 	}
 
 	return nil
@@ -65,7 +65,7 @@ func chooseVersion(ctx context.Context) error {
 	if strings.ToLower(answer) != "y" {
 		// TODO: handle passing a version
 		fmt.Println("Aborting install.")
-		return errExitCleanly
+		return exitCleanly
 	}
 
 	return nil
@@ -79,7 +79,7 @@ func downloadGo(ctx context.Context) error {
 
 	if strings.ToLower(answer) != "y" {
 		fmt.Println("Aborting install.")
-		return errExitCleanly
+		return exitCleanly
 	}
 
 	fmt.Printf("Downloading Go version %s to %s\n", *goVersion, installPath)
@@ -105,7 +105,7 @@ func setupGOPATH(ctx context.Context) error {
 
 	if strings.ToLower(answer) != "y" {
 		fmt.Println("Exiting and not setting up GOPATH.")
-		return errExitCleanly
+		return exitCleanly
 	}
 
 	fmt.Println("Setting up GOPATH")

@@ -67,7 +67,7 @@ func newRBACCmd() *cobra.Command {
 Usage:
 # controller-gen rbac [--name manager] [--input-dir input_dir] [--output-dir output_dir]
 `,
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			if err := rbac.Generate(o); err != nil {
 				log.Fatal(err)
 			}
@@ -76,13 +76,9 @@ Usage:
 	}
 
 	f := cmd.Flags()
-	f.StringVar(&o.Name, "name", o.Name, "name to be used as prefix in identifier for manifests")
-	f.StringVar(&o.ServiceAccount, "service-account", o.ServiceAccount, "service account to bind the role to")
-	f.StringVar(&o.Namespace, "service-account-namespace", o.Namespace, "namespace of the service account to bind the role to")
+	f.StringVar(&o.Name, "name", o.Name, "Name to be used as prefix in identifier for manifests")
 	f.StringVar(&o.InputDir, "input-dir", o.InputDir, "input directory pointing to Go source files")
-	f.StringVar(&o.OutputDir, "output-dir", o.OutputDir, "output directory where generated manifests will be saved")
-	f.StringVar(&o.RoleFile, "role-file", o.RoleFile, "output file for the role manifest")
-	f.StringVar(&o.BindingFile, "binding-file", o.BindingFile, "output file for the role binding manifest")
+	f.StringVar(&o.OutputDir, "output-dir", o.OutputDir, "output directory where generated manifests will be saved.")
 
 	return cmd
 }
@@ -97,7 +93,7 @@ func newCRDCmd() *cobra.Command {
 Usage:
 # controller-gen crd [--domain k8s.io] [--root-path input_dir] [--output-dir output_dir]
 `,
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			if err := g.ValidateAndInitFields(); err != nil {
 				log.Fatal(err)
 			}
@@ -114,8 +110,6 @@ Usage:
 	f.StringVar(&g.Domain, "domain", "", "domain of the resources, will try to fetch it from PROJECT file if not specified")
 	f.StringVar(&g.Namespace, "namespace", "", "CRD namespace, treat it as cluster scoped if not set")
 	f.BoolVar(&g.SkipMapValidation, "skip-map-validation", true, "if set to true, skip generating OpenAPI validation schema for map type in CRD.")
-	f.StringVar(&g.APIsPath, "apis-path", "pkg/apis", "the path to search for apis relative to the current directory")
-	f.StringVar(&g.APIsPkg, "apis-pkg", "", "the absolute Go pkg name for current project's api pkg.")
 
 	return cmd
 }
@@ -132,7 +126,7 @@ func newAllSubCmd() *cobra.Command {
 Usage:
 # controller-gen all
 `,
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			if projectDir == "" {
 				currDir, err := os.Getwd()
 				if err != nil {
@@ -164,19 +158,6 @@ Usage:
 				log.Fatal(err)
 			}
 			fmt.Printf("RBAC manifests generated under '%s' \n", rbacOptions.OutputDir)
-
-			o := &webhook.Options{
-				WriterOptions: webhook.WriterOptions{
-					InputDir:       filepath.Join(projectDir, "pkg"),
-					OutputDir:      filepath.Join(projectDir, "config", "webhook"),
-					PatchOutputDir: filepath.Join(projectDir, "config", "default"),
-				},
-			}
-			o.SetDefaults()
-			if err := webhook.Generate(o); err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("webhook manifests generated under '%s' directory\n", o.OutputDir)
 		},
 	}
 	f := cmd.Flags()
@@ -186,7 +167,7 @@ Usage:
 }
 
 func newWebhookCmd() *cobra.Command {
-	o := &webhook.Options{}
+	o := &webhook.ManifestOptions{}
 	o.SetDefaults()
 
 	cmd := &cobra.Command{
@@ -196,7 +177,7 @@ func newWebhookCmd() *cobra.Command {
 Usage:
 # controller-gen webhook [--input-dir input_dir] [--output-dir output_dir] [--patch-output-dir patch-output_dir]
 `,
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			if err := webhook.Generate(o); err != nil {
 				log.Fatal(err)
 			}

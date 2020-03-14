@@ -89,7 +89,7 @@ package pointer
 //   their expanded-out sets are equal.
 // * HR (HVN with deReference---see paper): this will require that we
 //   apply HVN until fixed point, which may need more bookkeeping of the
-//   correspondence of main nodes to onodes.
+//   correspondance of main nodes to onodes.
 // * Location Equivalence (see paper): have points-to sets contain not
 //   locations but location-equivalence class labels, each representing
 //   a set of locations.
@@ -391,9 +391,10 @@ func (c *storeConstraint) presolve(h *hvn) {
 		if debugHVNVerbose && h.log != nil {
 			fmt.Fprintf(h.log, "\to%d --> o%d\n", h.ref(odst), osrc)
 		}
+	} else {
+		// We don't interpret store-with-offset.
+		// See discussion of soundness at markIndirectNodes.
 	}
-	// We don't interpret store-with-offset.
-	// See discussion of soundness at markIndirectNodes.
 }
 
 // dst = &src.offset
@@ -784,11 +785,11 @@ func (h *hvn) simplify() {
 		assert(peLabels.Len() == 1, "PE class is not a singleton")
 		label := peLabel(peLabels.Min())
 
-		canonID := canon[label]
-		if canonID == nodeid(h.N) {
+		canonId := canon[label]
+		if canonId == nodeid(h.N) {
 			// id becomes the representative of the PE label.
-			canonID = id
-			canon[label] = canonID
+			canonId = id
+			canon[label] = canonId
 
 			if h.a.log != nil {
 				fmt.Fprintf(h.a.log, "\tpts(n%d) is canonical : \t(%s)\n",
@@ -797,8 +798,8 @@ func (h *hvn) simplify() {
 
 		} else {
 			// Link the solver states for the two nodes.
-			assert(h.a.nodes[canonID].solve != nil, "missing solver state")
-			h.a.nodes[id].solve = h.a.nodes[canonID].solve
+			assert(h.a.nodes[canonId].solve != nil, "missing solver state")
+			h.a.nodes[id].solve = h.a.nodes[canonId].solve
 
 			if h.a.log != nil {
 				// TODO(adonovan): debug: reorganize the log so it prints
@@ -806,11 +807,11 @@ func (h *hvn) simplify() {
 				// 	pe y = x1, ..., xn
 				// for each canonical y.  Requires allocation.
 				fmt.Fprintf(h.a.log, "\tpts(n%d) = pts(n%d) : %s\n",
-					id, canonID, h.a.nodes[id].typ)
+					id, canonId, h.a.nodes[id].typ)
 			}
 		}
 
-		mapping[id] = canonID
+		mapping[id] = canonId
 	}
 
 	// Renumber the constraints, eliminate duplicates, and eliminate

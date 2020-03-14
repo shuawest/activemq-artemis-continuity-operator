@@ -145,17 +145,13 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 			Title:       "UserService",
 			Description: "Resource for managing Users",
 			Contact: &spec.ContactInfo{
-				ContactInfoProps: spec.ContactInfoProps{
-					Name:  "john",
-					Email: "john@doe.rp",
-					URL:   "http://johndoe.org",
-				},
+				Name:  "john",
+				Email: "john@doe.rp",
+				URL:   "http://johndoe.org",
 			},
 			License: &spec.License{
-				LicenseProps: spec.LicenseProps{
-					Name: "MIT",
-					URL:  "http://mit.org",
-				},
+				Name: "MIT",
+				URL:  "http://mit.org",
 			},
 			Version: "1.0.0",
 		},

@@ -34,8 +34,8 @@ const (
 	CodeServerOverloaded = -32000
 )
 
-// WireRequest is sent to a server to represent a Call or Notify operaton.
-type WireRequest struct {
+// Request is sent to a server to represent a Call or Notify operaton.
+type Request struct {
 	// VersionTag is always encoded as the string "2.0"
 	VersionTag VersionTag `json:"jsonrpc"`
 	// Method is a string containing the method name to invoke.
@@ -48,11 +48,11 @@ type WireRequest struct {
 	ID *ID `json:"id,omitempty"`
 }
 
-// WireResponse is a reply to a Request.
+// Response is a reply to a Request.
 // It will always have the ID field set to tie it back to a request, and will
 // have either the Result or Error fields set depending on whether it is a
 // success or failure response.
-type WireResponse struct {
+type Response struct {
 	// VersionTag is always encoded as the string "2.0"
 	VersionTag VersionTag `json:"jsonrpc"`
 	// Result is the response value, and is required on success.
@@ -87,6 +87,11 @@ type ID struct {
 	Number int64
 }
 
+// IsNotify returns true if this request is a notification.
+func (r *Request) IsNotify() bool {
+	return r.ID == nil
+}
+
 func (err *Error) Error() string {
 	if err == nil {
 		return ""
@@ -104,7 +109,7 @@ func (VersionTag) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if version != "2.0" {
-		return fmt.Errorf("invalid RPC version %v", version)
+		return fmt.Errorf("Invalid RPC version %v", version)
 	}
 	return nil
 }

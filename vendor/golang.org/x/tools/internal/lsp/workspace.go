@@ -6,54 +6,55 @@ package lsp
 
 import (
 	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 
+	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/internal/lsp/protocol"
-	"golang.org/x/tools/internal/lsp/source"
 	"golang.org/x/tools/internal/span"
-	errors "golang.org/x/xerrors"
 )
 
-func (s *Server) didChangeWorkspaceFolders(ctx context.Context, params *protocol.DidChangeWorkspaceFoldersParams) error {
-	event := params.Event
+func (s *Server) changeFolders(ctx context.Context, event protocol.WorkspaceFoldersChangeEvent) error {
 	for _, folder := range event.Removed {
 		view := s.session.View(folder.Name)
 		if view != nil {
 			view.Shutdown(ctx)
 		} else {
-			return errors.Errorf("view %s for %v not found", folder.Name, folder.URI)
+			return fmt.Errorf("view %s for %v not found", folder.Name, folder.URI)
 		}
 	}
-	s.addFolders(ctx, event.Added)
+
+	for _, folder := range event.Added {
+		if err := s.addView(ctx, folder.Name, span.NewURI(folder.URI)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (s *Server) addView(ctx context.Context, name string, uri span.URI) (source.View, source.Snapshot, error) {
-	s.stateMu.Lock()
-	state := s.state
-	s.stateMu.Unlock()
-	if state < serverInitialized {
-		return nil, nil, errors.Errorf("addView called before server initialized")
+func (s *Server) addView(ctx context.Context, name string, uri span.URI) error {
+	// We need a "detached" context so it does not get timeout cancelled.
+	// TODO(iancottrell): Do we need to copy any values across?
+	viewContext := context.Background()
+	folderPath, err := uri.Filename()
+	if err != nil {
+		return err
 	}
+	s.session.NewView(name, uri, &packages.Config{
+		Context: viewContext,
+		Dir:     folderPath,
+		Env:     os.Environ(),
+		Mode:    packages.LoadImports,
+		Fset:    token.NewFileSet(),
+		Overlay: make(map[string][]byte),
+		ParseFile: func(fset *token.FileSet, filename string, src []byte) (*ast.File, error) {
+			return parser.ParseFile(fset, filename, src, parser.AllErrors|parser.ParseComments)
+		},
+		Tests: true,
+	})
 
-	options := s.session.Options()
-	if err := s.fetchConfig(ctx, name, uri, &options); err != nil {
-		return nil, nil, err
-	}
-	return s.session.NewView(ctx, name, uri, options)
-}
-
-func (s *Server) didChangeConfiguration(ctx context.Context, changed interface{}) error {
-	// go through all the views getting the config
-	for _, view := range s.session.Views() {
-		options := s.session.Options()
-		if err := s.fetchConfig(ctx, view.Name(), view.Folder(), &options); err != nil {
-			return err
-		}
-		view, err := view.SetOptions(ctx, options)
-		if err != nil {
-			return err
-		}
-		go s.diagnoseDetached(view.Snapshot())
-	}
 	return nil
 }

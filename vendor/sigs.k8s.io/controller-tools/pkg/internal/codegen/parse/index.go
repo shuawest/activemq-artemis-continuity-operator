@@ -71,8 +71,7 @@ func (b *APIs) parseIndex() {
 
 		// TODO: revisit the part...
 		if r.Resource == "" {
-			rs := inflect.NewDefaultRuleset()
-			r.Resource = rs.Pluralize(strings.ToLower(r.Kind))
+			r.Resource = strings.ToLower(inflect.Pluralize(r.Kind))
 		}
 		rt, err := parseResourceAnnotation(c)
 		if err != nil {

@@ -27,7 +27,7 @@ var (
 	version = "devel"
 )
 
-var errExitCleanly error = errors.New("exit cleanly sentinel value")
+var exitCleanly error = errors.New("exit cleanly sentinel value")
 
 func main() {
 	flag.Parse()
@@ -41,7 +41,7 @@ func main() {
 
 	runStep := func(s step) {
 		err := s(ctx)
-		if err == errExitCleanly {
+		if err == exitCleanly {
 			os.Exit(0)
 		}
 		if err != nil {

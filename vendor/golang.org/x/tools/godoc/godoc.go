@@ -288,7 +288,7 @@ func foreachLine(in []byte, fn func(line []byte)) {
 var commentPrefix = []byte(`<span class="comment">// `)
 
 // linkedField determines whether the given line starts with an
-// identifier in the provided ids map (mapping from identifier to the
+// identifer in the provided ids map (mapping from identifier to the
 // same identifier). The line can start with either an identifier or
 // an identifier in a comment. If one matches, it returns the
 // identifier that matched. Otherwise it returns the empty string.
@@ -312,7 +312,9 @@ func linkedField(line []byte, ids map[string]string) string {
 	//
 	// TODO: do this better, so it works for all
 	// comments, including unconventional ones.
-	line = bytes.TrimPrefix(line, commentPrefix)
+	if bytes.HasPrefix(line, commentPrefix) {
+		line = line[len(commentPrefix):]
+	}
 	id := scanIdentifier(line)
 	if len(id) == 0 {
 		// No leading identifier. Avoid map lookup for
@@ -879,7 +881,7 @@ func (p *Presentation) writeNode(w io.Writer, pageInfo *PageInfo, fset *token.Fi
 		log.Print(err)
 	}
 
-	// Add comments to struct fields saying which Go version introduced them.
+	// Add comments to struct fields saying which Go version introducd them.
 	if structName != "" {
 		fieldSince := apiInfo.fieldSince[structName]
 		typeSince := apiInfo.typeSince[structName]

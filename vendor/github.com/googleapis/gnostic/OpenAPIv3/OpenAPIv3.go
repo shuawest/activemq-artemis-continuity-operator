@@ -540,7 +540,7 @@ func NewDiscriminator(in interface{}, context *compiler.Context) (*Discriminator
 			errors = append(errors, compiler.NewError(context, message))
 		}
 		allowedKeys := []string{"mapping", "propertyName"}
-		allowedPatterns := []*regexp.Regexp{pattern1}
+		var allowedPatterns []*regexp.Regexp
 		invalidKeys := compiler.InvalidKeysInMap(m, allowedKeys, allowedPatterns)
 		if len(invalidKeys) > 0 {
 			message := fmt.Sprintf("has invalid %s: %+v", compiler.PluralProperties(len(invalidKeys)), strings.Join(invalidKeys, ", "))
@@ -562,37 +562,6 @@ func NewDiscriminator(in interface{}, context *compiler.Context) (*Discriminator
 			x.Mapping, err = NewStrings(v2, compiler.NewContext("mapping", context))
 			if err != nil {
 				errors = append(errors, err)
-			}
-		}
-		// repeated NamedAny specification_extension = 3;
-		// MAP: Any ^x-
-		x.SpecificationExtension = make([]*NamedAny, 0)
-		for _, item := range m {
-			k, ok := compiler.StringValue(item.Key)
-			if ok {
-				v := item.Value
-				if strings.HasPrefix(k, "x-") {
-					pair := &NamedAny{}
-					pair.Name = k
-					result := &Any{}
-					handled, resultFromExt, err := compiler.HandleExtension(context, v, k)
-					if handled {
-						if err != nil {
-							errors = append(errors, err)
-						} else {
-							bytes, _ := yaml.Marshal(v)
-							result.Yaml = string(bytes)
-							result.Value = resultFromExt
-							pair.Value = result
-						}
-					} else {
-						pair.Value, err = NewAny(v, compiler.NewContext(k, context))
-						if err != nil {
-							errors = append(errors, err)
-						}
-					}
-					x.SpecificationExtension = append(x.SpecificationExtension, pair)
-				}
 			}
 		}
 	}
@@ -1384,7 +1353,7 @@ func NewInfo(in interface{}, context *compiler.Context) (*Info, error) {
 			message := fmt.Sprintf("is missing required %s: %+v", compiler.PluralProperties(len(missingKeys)), strings.Join(missingKeys, ", "))
 			errors = append(errors, compiler.NewError(context, message))
 		}
-		allowedKeys := []string{"contact", "description", "license", "summary", "termsOfService", "title", "version"}
+		allowedKeys := []string{"contact", "description", "license", "termsOfService", "title", "version"}
 		allowedPatterns := []*regexp.Regexp{pattern1}
 		invalidKeys := compiler.InvalidKeysInMap(m, allowedKeys, allowedPatterns)
 		if len(invalidKeys) > 0 {
@@ -1445,16 +1414,7 @@ func NewInfo(in interface{}, context *compiler.Context) (*Info, error) {
 				errors = append(errors, compiler.NewError(context, message))
 			}
 		}
-		// string summary = 7;
-		v7 := compiler.MapValueForKey(m, "summary")
-		if v7 != nil {
-			x.Summary, ok = v7.(string)
-			if !ok {
-				message := fmt.Sprintf("has unexpected value for summary: %+v (%T)", v7, v7)
-				errors = append(errors, compiler.NewError(context, message))
-			}
-		}
-		// repeated NamedAny specification_extension = 8;
+		// repeated NamedAny specification_extension = 7;
 		// MAP: Any ^x-
 		x.SpecificationExtension = make([]*NamedAny, 0)
 		for _, item := range m {
@@ -5257,14 +5217,6 @@ func (m *Discriminator) ResolveReferences(root string) (interface{}, error) {
 			errors = append(errors, err)
 		}
 	}
-	for _, item := range m.SpecificationExtension {
-		if item != nil {
-			_, err := item.ResolveReferences(root)
-			if err != nil {
-				errors = append(errors, err)
-			}
-		}
-	}
 	return nil, compiler.NewErrorGroupOrNil(errors)
 }
 
@@ -6762,9 +6714,6 @@ func (m *AnyOrExpression) ToRawInfo() interface{} {
 // ToRawInfo returns a description of AnysOrExpressions suitable for JSON or YAML export.
 func (m *AnysOrExpressions) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -6777,9 +6726,6 @@ func (m *AnysOrExpressions) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Callback suitable for JSON or YAML export.
 func (m *Callback) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Path != nil {
 		for _, item := range m.Path {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -6815,9 +6761,6 @@ func (m *CallbackOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of CallbacksOrReferences suitable for JSON or YAML export.
 func (m *CallbacksOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -6830,9 +6773,6 @@ func (m *CallbacksOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Components suitable for JSON or YAML export.
 func (m *Components) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Schemas != nil {
 		info = append(info, yaml.MapItem{Key: "schemas", Value: m.Schemas.ToRawInfo()})
 	}
@@ -6881,9 +6821,6 @@ func (m *Components) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Contact suitable for JSON or YAML export.
 func (m *Contact) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -6924,34 +6861,25 @@ func (m *DefaultType) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Discriminator suitable for JSON or YAML export.
 func (m *Discriminator) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.PropertyName != "" {
+		info = append(info, yaml.MapItem{Key: "propertyName", Value: m.PropertyName})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "propertyName", Value: m.PropertyName})
 	if m.Mapping != nil {
 		info = append(info, yaml.MapItem{Key: "mapping", Value: m.Mapping.ToRawInfo()})
 	}
 	// &{Name:mapping Type:Strings StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
-	if m.SpecificationExtension != nil {
-		for _, item := range m.SpecificationExtension {
-			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
-		}
-	}
-	// &{Name:SpecificationExtension Type:NamedAny StringEnumValues:[] MapType:Any Repeated:true Pattern:^x- Implicit:true Description:}
 	return info
 }
 
 // ToRawInfo returns a description of Document suitable for JSON or YAML export.
 func (m *Document) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Openapi != "" {
+		info = append(info, yaml.MapItem{Key: "openapi", Value: m.Openapi})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "openapi", Value: m.Openapi})
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "info", Value: m.Info.ToRawInfo()})
+	if m.Info != nil {
+		info = append(info, yaml.MapItem{Key: "info", Value: m.Info.ToRawInfo()})
+	}
 	// &{Name:info Type:Info StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
 	if len(m.Servers) != 0 {
 		items := make([]interface{}, 0)
@@ -6961,8 +6889,9 @@ func (m *Document) ToRawInfo() interface{} {
 		info = append(info, yaml.MapItem{Key: "servers", Value: items})
 	}
 	// &{Name:servers Type:Server StringEnumValues:[] MapType: Repeated:true Pattern: Implicit:false Description:}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "paths", Value: m.Paths.ToRawInfo()})
+	if m.Paths != nil {
+		info = append(info, yaml.MapItem{Key: "paths", Value: m.Paths.ToRawInfo()})
+	}
 	// &{Name:paths Type:Paths StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
 	if m.Components != nil {
 		info = append(info, yaml.MapItem{Key: "components", Value: m.Components.ToRawInfo()})
@@ -7000,9 +6929,6 @@ func (m *Document) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Encoding suitable for JSON or YAML export.
 func (m *Encoding) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.ContentType != "" {
 		info = append(info, yaml.MapItem{Key: "contentType", Value: m.ContentType})
 	}
@@ -7031,9 +6957,6 @@ func (m *Encoding) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Encodings suitable for JSON or YAML export.
 func (m *Encodings) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7046,9 +6969,6 @@ func (m *Encodings) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Example suitable for JSON or YAML export.
 func (m *Example) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Summary != "" {
 		info = append(info, yaml.MapItem{Key: "summary", Value: m.Summary})
 	}
@@ -7088,9 +7008,6 @@ func (m *ExampleOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ExamplesOrReferences suitable for JSON or YAML export.
 func (m *ExamplesOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7103,9 +7020,6 @@ func (m *ExamplesOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Expression suitable for JSON or YAML export.
 func (m *Expression) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7118,14 +7032,12 @@ func (m *Expression) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ExternalDocs suitable for JSON or YAML export.
 func (m *ExternalDocs) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "url", Value: m.Url})
+	if m.Url != "" {
+		info = append(info, yaml.MapItem{Key: "url", Value: m.Url})
+	}
 	if m.SpecificationExtension != nil {
 		for _, item := range m.SpecificationExtension {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7138,9 +7050,6 @@ func (m *ExternalDocs) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Header suitable for JSON or YAML export.
 func (m *Header) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -7207,9 +7116,6 @@ func (m *HeaderOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of HeadersOrReferences suitable for JSON or YAML export.
 func (m *HeadersOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7222,11 +7128,9 @@ func (m *HeadersOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Info suitable for JSON or YAML export.
 func (m *Info) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Title != "" {
+		info = append(info, yaml.MapItem{Key: "title", Value: m.Title})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "title", Value: m.Title})
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -7241,10 +7145,8 @@ func (m *Info) ToRawInfo() interface{} {
 		info = append(info, yaml.MapItem{Key: "license", Value: m.License.ToRawInfo()})
 	}
 	// &{Name:license Type:License StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "version", Value: m.Version})
-	if m.Summary != "" {
-		info = append(info, yaml.MapItem{Key: "summary", Value: m.Summary})
+	if m.Version != "" {
+		info = append(info, yaml.MapItem{Key: "version", Value: m.Version})
 	}
 	if m.SpecificationExtension != nil {
 		for _, item := range m.SpecificationExtension {
@@ -7258,9 +7160,6 @@ func (m *Info) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ItemsItem suitable for JSON or YAML export.
 func (m *ItemsItem) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if len(m.SchemaOrReference) != 0 {
 		items := make([]interface{}, 0)
 		for _, item := range m.SchemaOrReference {
@@ -7275,11 +7174,9 @@ func (m *ItemsItem) ToRawInfo() interface{} {
 // ToRawInfo returns a description of License suitable for JSON or YAML export.
 func (m *License) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Name != "" {
+		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	if m.Url != "" {
 		info = append(info, yaml.MapItem{Key: "url", Value: m.Url})
 	}
@@ -7295,9 +7192,6 @@ func (m *License) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Link suitable for JSON or YAML export.
 func (m *Link) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.OperationRef != "" {
 		info = append(info, yaml.MapItem{Key: "operationRef", Value: m.OperationRef})
 	}
@@ -7348,9 +7242,6 @@ func (m *LinkOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of LinksOrReferences suitable for JSON or YAML export.
 func (m *LinksOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7363,9 +7254,6 @@ func (m *LinksOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of MediaType suitable for JSON or YAML export.
 func (m *MediaType) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Schema != nil {
 		info = append(info, yaml.MapItem{Key: "schema", Value: m.Schema.ToRawInfo()})
 	}
@@ -7394,9 +7282,6 @@ func (m *MediaType) ToRawInfo() interface{} {
 // ToRawInfo returns a description of MediaTypes suitable for JSON or YAML export.
 func (m *MediaTypes) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7409,9 +7294,6 @@ func (m *MediaTypes) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedAny suitable for JSON or YAML export.
 func (m *NamedAny) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7422,9 +7304,6 @@ func (m *NamedAny) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedAnyOrExpression suitable for JSON or YAML export.
 func (m *NamedAnyOrExpression) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7435,9 +7314,6 @@ func (m *NamedAnyOrExpression) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedCallbackOrReference suitable for JSON or YAML export.
 func (m *NamedCallbackOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7448,9 +7324,6 @@ func (m *NamedCallbackOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedEncoding suitable for JSON or YAML export.
 func (m *NamedEncoding) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7461,9 +7334,6 @@ func (m *NamedEncoding) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedExampleOrReference suitable for JSON or YAML export.
 func (m *NamedExampleOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7474,9 +7344,6 @@ func (m *NamedExampleOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedHeaderOrReference suitable for JSON or YAML export.
 func (m *NamedHeaderOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7487,9 +7354,6 @@ func (m *NamedHeaderOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedLinkOrReference suitable for JSON or YAML export.
 func (m *NamedLinkOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7500,9 +7364,6 @@ func (m *NamedLinkOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedMediaType suitable for JSON or YAML export.
 func (m *NamedMediaType) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7513,9 +7374,6 @@ func (m *NamedMediaType) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedParameterOrReference suitable for JSON or YAML export.
 func (m *NamedParameterOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7526,9 +7384,6 @@ func (m *NamedParameterOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedPathItem suitable for JSON or YAML export.
 func (m *NamedPathItem) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7539,9 +7394,6 @@ func (m *NamedPathItem) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedRequestBodyOrReference suitable for JSON or YAML export.
 func (m *NamedRequestBodyOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7552,9 +7404,6 @@ func (m *NamedRequestBodyOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedResponseOrReference suitable for JSON or YAML export.
 func (m *NamedResponseOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7565,9 +7414,6 @@ func (m *NamedResponseOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedSchemaOrReference suitable for JSON or YAML export.
 func (m *NamedSchemaOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7578,9 +7424,6 @@ func (m *NamedSchemaOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedSecuritySchemeOrReference suitable for JSON or YAML export.
 func (m *NamedSecuritySchemeOrReference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7591,9 +7434,6 @@ func (m *NamedSecuritySchemeOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedServerVariable suitable for JSON or YAML export.
 func (m *NamedServerVariable) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7604,9 +7444,6 @@ func (m *NamedServerVariable) ToRawInfo() interface{} {
 // ToRawInfo returns a description of NamedString suitable for JSON or YAML export.
 func (m *NamedString) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
@@ -7619,9 +7456,6 @@ func (m *NamedString) ToRawInfo() interface{} {
 // ToRawInfo returns a description of OauthFlow suitable for JSON or YAML export.
 func (m *OauthFlow) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AuthorizationUrl != "" {
 		info = append(info, yaml.MapItem{Key: "authorizationUrl", Value: m.AuthorizationUrl})
 	}
@@ -7647,9 +7481,6 @@ func (m *OauthFlow) ToRawInfo() interface{} {
 // ToRawInfo returns a description of OauthFlows suitable for JSON or YAML export.
 func (m *OauthFlows) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Implicit != nil {
 		info = append(info, yaml.MapItem{Key: "implicit", Value: m.Implicit.ToRawInfo()})
 	}
@@ -7678,9 +7509,6 @@ func (m *OauthFlows) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Object suitable for JSON or YAML export.
 func (m *Object) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7693,9 +7521,6 @@ func (m *Object) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Operation suitable for JSON or YAML export.
 func (m *Operation) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if len(m.Tags) != 0 {
 		info = append(info, yaml.MapItem{Key: "tags", Value: m.Tags})
 	}
@@ -7724,8 +7549,9 @@ func (m *Operation) ToRawInfo() interface{} {
 		info = append(info, yaml.MapItem{Key: "requestBody", Value: m.RequestBody.ToRawInfo()})
 	}
 	// &{Name:requestBody Type:RequestBodyOrReference StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "responses", Value: m.Responses.ToRawInfo()})
+	if m.Responses != nil {
+		info = append(info, yaml.MapItem{Key: "responses", Value: m.Responses.ToRawInfo()})
+	}
 	// &{Name:responses Type:Responses StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
 	if m.Callbacks != nil {
 		info = append(info, yaml.MapItem{Key: "callbacks", Value: m.Callbacks.ToRawInfo()})
@@ -7762,13 +7588,12 @@ func (m *Operation) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Parameter suitable for JSON or YAML export.
 func (m *Parameter) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Name != "" {
+		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "in", Value: m.In})
+	if m.In != "" {
+		info = append(info, yaml.MapItem{Key: "in", Value: m.In})
+	}
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -7835,9 +7660,6 @@ func (m *ParameterOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ParametersOrReferences suitable for JSON or YAML export.
 func (m *ParametersOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7850,9 +7672,6 @@ func (m *ParametersOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of PathItem suitable for JSON or YAML export.
 func (m *PathItem) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.XRef != "" {
 		info = append(info, yaml.MapItem{Key: "$ref", Value: m.XRef})
 	}
@@ -7922,9 +7741,6 @@ func (m *PathItem) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Paths suitable for JSON or YAML export.
 func (m *Paths) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Path != nil {
 		for _, item := range m.Path {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7943,9 +7759,6 @@ func (m *Paths) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Properties suitable for JSON or YAML export.
 func (m *Properties) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7958,20 +7771,15 @@ func (m *Properties) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Reference suitable for JSON or YAML export.
 func (m *Reference) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.XRef != "" {
+		info = append(info, yaml.MapItem{Key: "$ref", Value: m.XRef})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "$ref", Value: m.XRef})
 	return info
 }
 
 // ToRawInfo returns a description of RequestBodiesOrReferences suitable for JSON or YAML export.
 func (m *RequestBodiesOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -7984,14 +7792,12 @@ func (m *RequestBodiesOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of RequestBody suitable for JSON or YAML export.
 func (m *RequestBody) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "content", Value: m.Content.ToRawInfo()})
+	if m.Content != nil {
+		info = append(info, yaml.MapItem{Key: "content", Value: m.Content.ToRawInfo()})
+	}
 	// &{Name:content Type:MediaTypes StringEnumValues:[] MapType: Repeated:false Pattern: Implicit:false Description:}
 	if m.Required != false {
 		info = append(info, yaml.MapItem{Key: "required", Value: m.Required})
@@ -8025,11 +7831,9 @@ func (m *RequestBodyOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Response suitable for JSON or YAML export.
 func (m *Response) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Description != "" {
+		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	if m.Headers != nil {
 		info = append(info, yaml.MapItem{Key: "headers", Value: m.Headers.ToRawInfo()})
 	}
@@ -8071,9 +7875,6 @@ func (m *ResponseOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Responses suitable for JSON or YAML export.
 func (m *Responses) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Default != nil {
 		info = append(info, yaml.MapItem{Key: "default", Value: m.Default.ToRawInfo()})
 	}
@@ -8096,9 +7897,6 @@ func (m *Responses) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ResponsesOrReferences suitable for JSON or YAML export.
 func (m *ResponsesOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -8111,9 +7909,6 @@ func (m *ResponsesOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Schema suitable for JSON or YAML export.
 func (m *Schema) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Nullable != false {
 		info = append(info, yaml.MapItem{Key: "nullable", Value: m.Nullable})
 	}
@@ -8281,9 +8076,6 @@ func (m *SchemaOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of SchemasOrReferences suitable for JSON or YAML export.
 func (m *SchemasOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -8296,20 +8088,15 @@ func (m *SchemasOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of SecurityRequirement suitable for JSON or YAML export.
 func (m *SecurityRequirement) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	return info
 }
 
 // ToRawInfo returns a description of SecurityScheme suitable for JSON or YAML export.
 func (m *SecurityScheme) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Type != "" {
+		info = append(info, yaml.MapItem{Key: "type", Value: m.Type})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "type", Value: m.Type})
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -8361,9 +8148,6 @@ func (m *SecuritySchemeOrReference) ToRawInfo() interface{} {
 // ToRawInfo returns a description of SecuritySchemesOrReferences suitable for JSON or YAML export.
 func (m *SecuritySchemesOrReferences) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -8376,11 +8160,9 @@ func (m *SecuritySchemesOrReferences) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Server suitable for JSON or YAML export.
 func (m *Server) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Url != "" {
+		info = append(info, yaml.MapItem{Key: "url", Value: m.Url})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "url", Value: m.Url})
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -8400,14 +8182,12 @@ func (m *Server) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ServerVariable suitable for JSON or YAML export.
 func (m *ServerVariable) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if len(m.Enum) != 0 {
 		info = append(info, yaml.MapItem{Key: "enum", Value: m.Enum})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "default", Value: m.Default})
+	if m.Default != "" {
+		info = append(info, yaml.MapItem{Key: "default", Value: m.Default})
+	}
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -8423,9 +8203,6 @@ func (m *ServerVariable) ToRawInfo() interface{} {
 // ToRawInfo returns a description of ServerVariables suitable for JSON or YAML export.
 func (m *ServerVariables) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.AdditionalProperties != nil {
 		for _, item := range m.AdditionalProperties {
 			info = append(info, yaml.MapItem{Key: item.Name, Value: item.Value.ToRawInfo()})
@@ -8462,9 +8239,6 @@ func (m *StringArray) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Strings suitable for JSON or YAML export.
 func (m *Strings) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	// &{Name:additionalProperties Type:NamedString StringEnumValues:[] MapType:string Repeated:true Pattern: Implicit:true Description:}
 	return info
 }
@@ -8472,11 +8246,9 @@ func (m *Strings) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Tag suitable for JSON or YAML export.
 func (m *Tag) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
+	if m.Name != "" {
+		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
-	// always include this required field.
-	info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	if m.Description != "" {
 		info = append(info, yaml.MapItem{Key: "description", Value: m.Description})
 	}
@@ -8496,9 +8268,6 @@ func (m *Tag) ToRawInfo() interface{} {
 // ToRawInfo returns a description of Xml suitable for JSON or YAML export.
 func (m *Xml) ToRawInfo() interface{} {
 	info := yaml.MapSlice{}
-	if m == nil {
-		return info
-	}
 	if m.Name != "" {
 		info = append(info, yaml.MapItem{Key: "name", Value: m.Name})
 	}
