@@ -68,15 +68,16 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 				Properties: map[string]spec.Schema{
 					"adminUser": {
 						SchemaProps: spec.SchemaProps{
-							Description: "INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html",
+							Description: "User name for standard broker user. It is required for connecting to the broker. If left empty, it will be generated.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"adminPassword": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Password for standard broker user. It is required for connecting to the broker. If left empty, it will be generated.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"deploymentPlan": {
@@ -86,7 +87,8 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 					},
 					"acceptors": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
+							Description: "Configuration of all acceptors",
+							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
@@ -98,7 +100,8 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 					},
 					"connectors": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
+							Description: "Configuration of all connectors",
+							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
@@ -110,48 +113,56 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 					},
 					"console": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/rh-messaging/activemq-artemis-continuity-operator/pkg/apis/broker/v2alpha1.ConsoleType"),
+							Description: "Configuration for the embedded web console",
+							Ref:         ref("github.com/rh-messaging/activemq-artemis-continuity-operator/pkg/apis/broker/v2alpha1.ConsoleType"),
 						},
 					},
 					"siteId": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Name the continuity site. Must be unique in the set of peers (is same across the artemis cluster)",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"localContinuityUser": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Username to connect to the local broker for continuity connections.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"localContinuityPass": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Password to connect to the local broker for continuity connections.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"peerSiteUrl": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Username to connect to the peer site broker/cluster for continuity connections.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"peerContinuityUser": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Username to connect to the peer site broker/cluster for continuity connections.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"peerContinuityPass": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Password to connect to the peer site broker/cluster for continuity connections.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"servingAcceptors": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
+							Description: "List of acceptors that used for serving external clients. Continuity will control these acceptors to prevent producers and consumer from interacting while the site isn't active.",
+							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
@@ -164,56 +175,72 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 					},
 					"activeOnStart": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"boolean"},
-							Format: "",
+							Description: "Identifies this site should be active when first started. If another active site is connected to, this site will defer to the other. You can also start both sites inactive and explictly activate the desired start.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"brokerIdCacheSize": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
+							Description: "Size of the broker id cache size, used by the broker to remove duplicate messages across sites. Make sure the id cache is sufficiently sized for your volume of messages. The default is 3000.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"inflowStagingDelay": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
+							Description: "Amount of time in millseconds to delay messages in the inflow staging queues before delivering them to the target queues. Useful for active:active site topologies. The default is 60000 ms or 1 minute.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"bridgeInterval": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
+							Description: "Bridge reconnection interval for all the bridges created by the continuity plugin. The default is 1000 ms or 1 second.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"bridgeIntervalMultiplier": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"number"},
-							Format: "float",
+							Description: "Bridge reconnection interval backoff multiplier for all the bridges created by the continuity plugin. The default is 0.5.",
+							Type:        []string{"number"},
+							Format:      "float",
+						},
+					},
+					"outflowExhaustedPollDuration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Time in milliseconds between polls to check for a site to be exhausted during deactivation. The default is 100 ms.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"inflowAcksConsumedPollDuration": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
+							Description: "Time in milliseconds between polls to all the inflow acks have been consumed during activation. The default is 100 ms.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"activationTimeout": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
+							Description: "Time in milliseconds to activate a site and start serving clients, overriding the wait for the peer site to be exhausted, and acks to be consumed. The default is 300000 ms or 5 minutes.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"reorgManagement": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"boolean"},
-							Format: "",
+							Description: "Whether or not to reorganized all the address, queue, divert, and bridge primitives under the continuity hierarchy in JMX/Jolokia. The default is true.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"continuityLogLevel": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Logging level for the continuity plugin (TRACE, DEBUG, INFO, or ERROR). The default is INFO.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
@@ -233,8 +260,7 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuityStatus(ref common.
 				Properties: map[string]spec.Schema{
 					"podStatus": {
 						SchemaProps: spec.SchemaProps{
-							Description: "INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html",
-							Ref:         ref("github.com/RHsyseng/operator-utils/pkg/olm.DeploymentStatus"),
+							Ref: ref("github.com/RHsyseng/operator-utils/pkg/olm.DeploymentStatus"),
 						},
 					},
 				},
