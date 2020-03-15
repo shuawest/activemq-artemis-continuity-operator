@@ -31,12 +31,10 @@ type ActiveMQArtemisContinuitySpec struct {
 	PeerContinuityUser string `json:"peerContinuityUser"`
 	// Password to connect to the peer site broker/cluster for continuity connections.
 	PeerContinuityPass string `json:"peerContinuityPass"`
-	// List of acceptors that used for serving external clients. Continuity will control these acceptors to prevent producers and consumer from interacting while the site isn't active.
-	ServingAcceptors []string `json:"servingAcceptors"`
-	// Identifies this site should be active when first started. If another active site is connected to, this site will defer to the other. You can also start both sites inactive and explictly activate the desired start.
+	// Identifies this is the site that should be active when first started. If another active site is connected to, this site will defer to the other. You can also start both sites inactive and explictly activate the desired start.
 	ActiveOnStart bool `json:"activeOnStart"`
 	// Size of the broker id cache size, used by the broker to remove duplicate messages across sites. Make sure the id cache is sufficiently sized for your volume of messages. The default is 3000.
-	BrokerIdCacheSize int32 `json:"brokerIdCacheSize,omitempty"`
+	BrokerIdCacheSize int64 `json:"brokerIdCacheSize,omitempty"`
 	// Amount of time in millseconds to delay messages in the inflow staging queues before delivering them to the target queues. Useful for active:active site topologies. The default is 60000 ms or 1 minute.
 	InflowStagingDelay int32 `json:"inflowStagingDelay,omitempty"`
 	// Bridge reconnection interval for all the bridges created by the continuity plugin. The default is 1000 ms or 1 second.
@@ -48,10 +46,11 @@ type ActiveMQArtemisContinuitySpec struct {
 	// Time in milliseconds between polls to all the inflow acks have been consumed during activation. The default is 100 ms.
 	InflowAcksConsumedPollDuration int32 `json:"inflowAcksConsumedPollDuration,omitempty"`
 	// Time in milliseconds to activate a site and start serving clients, overriding the wait for the peer site to be exhausted, and acks to be consumed. The default is 300000 ms or 5 minutes.
-	ActivationTimeout int32 `json:"activationTimeout,omitempty"`
+	ActivationTimeout int64 `json:"activationTimeout,omitempty"`
 	// Whether or not to reorganized all the address, queue, divert, and bridge primitives under the continuity hierarchy in JMX/Jolokia. The default is true.
 	ReorgManagement bool `json:"reorgManagement,omitempty"`
-	// Logging level for the continuity plugin (TRACE, DEBUG, INFO, or ERROR). The default is INFO.
+	// Logging level for the continuity plugin. The default is INFO.
+	// +kubebuilder:validation:Enum=TRACE,DEBUG,INFO,ERROR,FATAL
 	ContinuityLogLevel string `json:"continuityLogLevel,omitempty"`
 }
 

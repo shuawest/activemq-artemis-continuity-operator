@@ -101,13 +101,13 @@ spec:
               description: Time in milliseconds to activate a site and start serving
                 clients, overriding the wait for the peer site to be exhausted, and
                 acks to be consumed. The default is 300000 ms or 5 minutes.
-              format: int32
+              format: int64
               type: integer
             activeOnStart:
-              description: Identifies this site should be active when first started.
-                If another active site is connected to, this site will defer to the
-                other. You can also start both sites inactive and explictly activate
-                the desired start.
+              description: Identifies this is the site that should be active when
+                first started. If another active site is connected to, this site will
+                defer to the other. You can also start both sites inactive and explictly
+                activate the desired start.
               type: boolean
             adminPassword:
               description: Password for standard broker user. It is required for connecting
@@ -131,7 +131,7 @@ spec:
               description: Size of the broker id cache size, used by the broker to
                 remove duplicate messages across sites. Make sure the id cache is
                 sufficiently sized for your volume of messages. The default is 3000.
-              format: int32
+              format: int64
               type: integer
             connectors:
               description: Configuration of all connectors
@@ -211,8 +211,14 @@ spec:
                   type: boolean
               type: object
             continuityLogLevel:
-              description: Logging level for the continuity plugin (TRACE, DEBUG,
-                INFO, or ERROR). The default is INFO.
+              description: Logging level for the continuity plugin. The default is
+                INFO.
+              enum:
+              - TRACE
+              - DEBUG
+              - INFO
+              - ERROR
+              - FATAL
               type: string
             deploymentPlan:
               properties:
@@ -282,13 +288,6 @@ spec:
                 and bridge primitives under the continuity hierarchy in JMX/Jolokia.
                 The default is true.
               type: boolean
-            servingAcceptors:
-              description: List of acceptors that used for serving external clients.
-                Continuity will control these acceptors to prevent producers and consumer
-                from interacting while the site isn't active.
-              items:
-                type: string
-              type: array
             siteId:
               description: Name the continuity site. Must be unique in the set of
                 peers (is same across the artemis cluster)
@@ -300,7 +299,6 @@ spec:
           - peerSiteUrl
           - peerContinuityUser
           - peerContinuityPass
-          - servingAcceptors
           - activeOnStart
           type: object
         status:

@@ -159,23 +159,9 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 							Format:      "",
 						},
 					},
-					"servingAcceptors": {
-						SchemaProps: spec.SchemaProps{
-							Description: "List of acceptors that used for serving external clients. Continuity will control these acceptors to prevent producers and consumer from interacting while the site isn't active.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Type:   []string{"string"},
-										Format: "",
-									},
-								},
-							},
-						},
-					},
 					"activeOnStart": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Identifies this site should be active when first started. If another active site is connected to, this site will defer to the other. You can also start both sites inactive and explictly activate the desired start.",
+							Description: "Identifies this is the site that should be active when first started. If another active site is connected to, this site will defer to the other. You can also start both sites inactive and explictly activate the desired start.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -184,7 +170,7 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 						SchemaProps: spec.SchemaProps{
 							Description: "Size of the broker id cache size, used by the broker to remove duplicate messages across sites. Make sure the id cache is sufficiently sized for your volume of messages. The default is 3000.",
 							Type:        []string{"integer"},
-							Format:      "int32",
+							Format:      "int64",
 						},
 					},
 					"inflowStagingDelay": {
@@ -226,7 +212,7 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 						SchemaProps: spec.SchemaProps{
 							Description: "Time in milliseconds to activate a site and start serving clients, overriding the wait for the peer site to be exhausted, and acks to be consumed. The default is 300000 ms or 5 minutes.",
 							Type:        []string{"integer"},
-							Format:      "int32",
+							Format:      "int64",
 						},
 					},
 					"reorgManagement": {
@@ -238,13 +224,13 @@ func schema_pkg_apis_broker_v2alpha1_ActiveMQArtemisContinuitySpec(ref common.Re
 					},
 					"continuityLogLevel": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Logging level for the continuity plugin (TRACE, DEBUG, INFO, or ERROR). The default is INFO.",
+							Description: "Logging level for the continuity plugin. The default is INFO.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 				},
-				Required: []string{"siteId", "localContinuityUser", "localContinuityPass", "peerSiteUrl", "peerContinuityUser", "peerContinuityPass", "servingAcceptors", "activeOnStart"},
+				Required: []string{"siteId", "localContinuityUser", "localContinuityPass", "peerSiteUrl", "peerContinuityUser", "peerContinuityPass", "activeOnStart"},
 			},
 		},
 		Dependencies: []string{
