@@ -9,6 +9,7 @@ required = [
   "k8s.io/kube-openapi/cmd/openapi-gen",
   "k8s.io/gengo/args",
   "sigs.k8s.io/controller-tools/pkg/crd/generator",
+  "github.com/stretchr/testify/assert",
 ]
 
 [[override]]
@@ -68,7 +69,7 @@ required = [
 
 [[constraint]]
   name = "github.com/rh-messaging/activemq-artemis-operator"
-  version = "0.9.0"
+  version = "0.9.1"
 
 [prune]
   go-tests = true

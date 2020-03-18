@@ -100,11 +100,6 @@ func (in *ActiveMQArtemisContinuitySpec) DeepCopyInto(out *ActiveMQArtemisContin
 		copy(*out, *in)
 	}
 	out.Console = in.Console
-	if in.ServingAcceptors != nil {
-		in, out := &in.ServingAcceptors, &out.ServingAcceptors
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	return
 }
 

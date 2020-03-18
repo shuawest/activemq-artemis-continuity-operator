@@ -68,7 +68,7 @@ type DeploymentPlanType struct {
 	// If aio use ASYNCIO, if nio use NIO for journal IO
 	JournalType string `json:"journalType,omitempty"`
 	// If true migrate messages on scaledown
-	MessageMigration bool `json:"messageMigration,omitempty"`
+	MessageMigration *bool `json:"messageMigration,omitempty"`
 }
 
 type AcceptorType struct {
